@@ -10,7 +10,7 @@ import { Alerta, AlertaCreate } from '../models/alerta.model';
   providedIn: 'root'
 })
 export class ApiService {
-  private readonly API_URL = 'http://localhost:8001/api';
+  private readonly API_URL = 'http://localhost:8500/api';
 
   constructor(private http: HttpClient) {}
 
@@ -52,14 +52,17 @@ export class ApiService {
       params = params.set('itemsPerPage', filtros.itemsPerPage.toString());
     }
 
-    return this.http.get<any>(`${this.API_URL}/licitacions`, {
-      params,
-      headers: { 'Accept': 'application/ld+json' }
-    }).pipe(
-      map(response => ({
-        member: response.member || response['hydra:member'] || (Array.isArray(response) ? response : []),
-        totalItems: response.totalItems || response['hydra:totalItems'] || (Array.isArray(response) ? response.length : 0)
-      }))
+    return this.http.get<any>(`${this.API_URL}/licitacions`, { params }).pipe(
+      map((response: any) => {
+        // Handle both array and object responses
+        if (Array.isArray(response)) {
+          return { member: response, totalItems: response.length };
+        }
+        return {
+          member: response.member || response['hydra:member'] || [],
+          totalItems: response.totalItems || response['hydra:totalItems'] || 0
+        };
+      })
     );
   }
 
