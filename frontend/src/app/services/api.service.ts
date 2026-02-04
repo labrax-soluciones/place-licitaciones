@@ -148,4 +148,17 @@ export class ApiService {
       { valor: 'ANU', descripcion: 'Anulada' },
     ];
   }
+
+  // Categorías predefinidas
+  getCategorias(): Observable<{ id: string; nombre: string }[]> {
+    return this.http.get<{ id: string; nombre: string }[]>(`${this.API_URL}/categorias`);
+  }
+
+  getLicitacionesPorCategoria(categoria: string, soloAbiertas: boolean = false): Observable<any> {
+    let params = new HttpParams();
+    if (soloAbiertas) {
+      params = params.set('soloAbiertas', 'true');
+    }
+    return this.http.get<any>(`${this.API_URL}/licitaciones/categoria/${categoria}`, { params });
+  }
 }

@@ -13,6 +13,24 @@ import { Licitacion, FiltrosLicitacion } from '../../models/licitacion.model';
     <div class="licitaciones-page">
       <h1>Licitaciones</h1>
 
+      <!-- Categorías rápidas -->
+      <div class="categorias-panel">
+        <span class="categorias-label">Filtros rápidos:</span>
+        <button
+          *ngFor="let cat of categorias"
+          class="categoria-btn"
+          [class.active]="categoriaActiva === cat.id"
+          (click)="filtrarPorCategoria(cat.id)">
+          {{ cat.nombre }}
+        </button>
+        <button
+          *ngIf="categoriaActiva"
+          class="categoria-btn clear"
+          (click)="limpiarCategoria()">
+          ✕ Quitar filtro
+        </button>
+      </div>
+
       <!-- Filtros -->
       <div class="filtros-panel">
         <div class="filtros-row">
@@ -156,6 +174,50 @@ import { Licitacion, FiltrosLicitacion } from '../../models/licitacion.model';
     h1 {
       color: #1e3a5f;
       margin-bottom: 1.5rem;
+    }
+
+    .categorias-panel {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .categorias-label {
+      font-weight: 500;
+      color: #374151;
+      font-size: 0.9rem;
+    }
+
+    .categoria-btn {
+      padding: 0.5rem 1rem;
+      border: 2px solid #e5e7eb;
+      border-radius: 20px;
+      background: white;
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+
+      &:hover {
+        border-color: #3b82f6;
+        background: #eff6ff;
+      }
+
+      &.active {
+        border-color: #3b82f6;
+        background: #3b82f6;
+        color: white;
+      }
+
+      &.clear {
+        border-color: #ef4444;
+        color: #ef4444;
+
+        &:hover {
+          background: #fef2f2;
+        }
+      }
     }
 
     .filtros-panel {
@@ -446,6 +508,15 @@ export class ListaLicitacionesComponent implements OnInit {
   estados: { valor: string; descripcion: string }[] = [];
   provincias: string[] = [];
 
+  // Categorías predefinidas
+  categorias: { id: string; nombre: string }[] = [
+    { id: 'vehiculos', nombre: '🚗 Vehículos' },
+    { id: 'informatica', nombre: '💻 Informática' },
+    { id: 'limpieza', nombre: '🧹 Limpieza' },
+    { id: 'seguridad', nombre: '🔒 Seguridad' },
+  ];
+  categoriaActiva: string | null = null;
+
   currentPage = 1;
   itemsPerPage = 12;
   totalItems = 0;
@@ -461,7 +532,32 @@ export class ListaLicitacionesComponent implements OnInit {
     this.buscar();
   }
 
+  filtrarPorCategoria(categoria: string): void {
+    this.categoriaActiva = categoria;
+    this.loading = true;
+
+    this.api.getLicitacionesPorCategoria(categoria, this.soloAbiertas).subscribe({
+      next: (response) => {
+        this.licitaciones = response.licitaciones || [];
+        this.totalItems = response.total || 0;
+        this.totalPages = 1; // Sin paginación para categorías
+        this.currentPage = 1;
+        this.loading = false;
+      },
+      error: (err) => {
+        console.error('Error cargando categoría:', err);
+        this.loading = false;
+      }
+    });
+  }
+
+  limpiarCategoria(): void {
+    this.categoriaActiva = null;
+    this.buscar();
+  }
+
   buscar(): void {
+    this.categoriaActiva = null; // Limpiar categoría al buscar
     this.loading = true;
     this.currentPage = 1;
     this.cargarLicitaciones();

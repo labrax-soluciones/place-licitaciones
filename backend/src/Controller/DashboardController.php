@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Repository\LicitacionRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/api')]
@@ -64,5 +65,47 @@ class DashboardController extends AbstractController
         ], $licitaciones);
 
         return $this->json($data);
+    }
+
+    #[Route('/categorias', name: 'api_categorias', methods: ['GET'])]
+    public function categorias(): JsonResponse
+    {
+        return $this->json($this->licitacionRepository->getCategoriasDisponibles());
+    }
+
+    #[Route('/licitaciones/categoria/{categoria}', name: 'api_licitaciones_categoria', methods: ['GET'])]
+    public function licitacionesPorCategoria(string $categoria, Request $request): JsonResponse
+    {
+        $soloAbiertas = $request->query->getBoolean('soloAbiertas', false);
+        $licitaciones = $this->licitacionRepository->findByCategoria($categoria, $soloAbiertas);
+
+        $data = array_map(fn($l) => [
+            'id' => $l->getId(),
+            'idPlace' => $l->getIdPlace(),
+            'expediente' => $l->getExpediente(),
+            'titulo' => $l->getTitulo(),
+            'estado' => $l->getEstado(),
+            'estadoDescripcion' => $l->getEstadoDescripcion(),
+            'tipoContrato' => $l->getTipoContrato(),
+            'tipoContratoDescripcion' => $l->getTipoContratoDescripcion(),
+            'importeSinIva' => $l->getImporteSinIva(),
+            'importeConIva' => $l->getImporteConIva(),
+            'provincia' => $l->getProvincia(),
+            'codigosCpv' => $l->getCodigosCpv(),
+            'fechaPublicacion' => $l->getFechaPublicacion()?->format('Y-m-d'),
+            'fechaLimitePresentacion' => $l->getFechaLimitePresentacion()?->format('Y-m-d\TH:i:s'),
+            'urlLicitacion' => $l->getUrlLicitacion(),
+            'organoContratante' => $l->getOrganoContratante() ? [
+                'id' => $l->getOrganoContratante()->getId(),
+                'nif' => $l->getOrganoContratante()->getNif(),
+                'nombre' => $l->getOrganoContratante()->getNombre(),
+            ] : null,
+        ], $licitaciones);
+
+        return $this->json([
+            'categoria' => $categoria,
+            'total' => count($data),
+            'licitaciones' => $data
+        ]);
     }
 }

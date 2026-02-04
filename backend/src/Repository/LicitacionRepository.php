@@ -137,4 +137,95 @@ class LicitacionRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
+
+    /**
+     * Busca licitaciones por categoría predefinida
+     */
+    public function findByCategoria(string $categoria, bool $soloAbiertas = false): array
+    {
+        $keywords = $this->getKeywordsByCategoria($categoria);
+
+        if (empty($keywords)) {
+            return [];
+        }
+
+        $qb = $this->createQueryBuilder('l')
+            ->leftJoin('l.organoContratante', 'o')
+            ->addSelect('o');
+
+        // Construir condición OR para todas las palabras clave
+        $orConditions = [];
+        foreach ($keywords as $i => $keyword) {
+            $orConditions[] = "LOWER(l.titulo) LIKE LOWER(:kw{$i})";
+            $orConditions[] = "LOWER(l.descripcion) LIKE LOWER(:kw{$i})";
+            $qb->setParameter("kw{$i}", '%' . $keyword . '%');
+        }
+
+        $qb->andWhere('(' . implode(' OR ', $orConditions) . ')');
+
+        if ($soloAbiertas) {
+            $qb->andWhere('l.fechaLimitePresentacion > :now')
+               ->setParameter('now', new \DateTime());
+        }
+
+        $qb->orderBy('l.fechaPublicacion', 'DESC');
+
+        return $qb->getQuery()->getResult();
+    }
+
+    /**
+     * Devuelve las palabras clave para cada categoría
+     */
+    private function getKeywordsByCategoria(string $categoria): array
+    {
+        $categorias = [
+            'vehiculos' => [
+                'vehículo', 'vehiculo', 'vehículos', 'vehiculos',
+                'coche', 'coches',
+                'automóvil', 'automovil', 'automóviles', 'automoviles',
+                'turismo', 'turismos',
+                'motocicleta', 'motocicletas', 'moto', 'motos',
+                'renting',
+                'furgoneta', 'furgonetas',
+                'furgón', 'furgon', 'furgones',
+                'camión', 'camion', 'camiones',
+                'autocar', 'autocares',
+                'autobús', 'autobus', 'autobuses',
+                'flota de vehículos', 'flota de vehiculos',
+                'alquiler de vehículos', 'alquiler de vehiculos',
+                'parque móvil', 'parque movil',
+            ],
+            'informatica' => [
+                'informático', 'informatico', 'informática', 'informatica',
+                'software', 'hardware',
+                'ordenador', 'ordenadores',
+                'servidor', 'servidores',
+                'cloud', 'nube',
+                'desarrollo web', 'aplicación', 'aplicacion',
+            ],
+            'limpieza' => [
+                'limpieza', 'higiene', 'desinfección', 'desinfeccion',
+                'mantenimiento limpieza', 'servicio limpieza',
+            ],
+            'seguridad' => [
+                'seguridad', 'vigilancia', 'vigilante',
+                'alarma', 'cctv', 'videovigilancia',
+            ],
+        ];
+
+        return $categorias[$categoria] ?? [];
+    }
+
+    /**
+     * Devuelve las categorías disponibles
+     */
+    public function getCategoriasDisponibles(): array
+    {
+        return [
+            ['id' => 'vehiculos', 'nombre' => 'Vehículos (coches, motos, renting)'],
+            ['id' => 'informatica', 'nombre' => 'Informática y tecnología'],
+            ['id' => 'limpieza', 'nombre' => 'Limpieza e higiene'],
+            ['id' => 'seguridad', 'nombre' => 'Seguridad y vigilancia'],
+        ];
+    }
 }
