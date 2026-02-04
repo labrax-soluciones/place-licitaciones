@@ -10,7 +10,7 @@ import { Alerta, AlertaCreate } from '../models/alerta.model';
   providedIn: 'root'
 })
 export class ApiService {
-  private readonly API_URL = 'http://localhost:8000/api';
+  private readonly API_URL = 'http://localhost:8001/api';
 
   constructor(private http: HttpClient) {}
 
@@ -52,7 +52,15 @@ export class ApiService {
       params = params.set('itemsPerPage', filtros.itemsPerPage.toString());
     }
 
-    return this.http.get<LicitacionListResponse>(`${this.API_URL}/licitacions`, { params });
+    return this.http.get<any>(`${this.API_URL}/licitacions`, {
+      params,
+      headers: { 'Accept': 'application/ld+json' }
+    }).pipe(
+      map(response => ({
+        member: response.member || response['hydra:member'] || (Array.isArray(response) ? response : []),
+        totalItems: response.totalItems || response['hydra:totalItems'] || (Array.isArray(response) ? response.length : 0)
+      }))
+    );
   }
 
   getLicitacion(id: number): Observable<Licitacion> {
@@ -74,8 +82,9 @@ export class ApiService {
 
   // Alertas
   getAlertas(): Observable<Alerta[]> {
-    return this.http.get<{ 'hydra:member': Alerta[] }>(`${this.API_URL}/alertas`)
-      .pipe(map(response => response['hydra:member']));
+    return this.http.get<any>(`${this.API_URL}/alertas`, {
+      headers: { 'Accept': 'application/ld+json' }
+    }).pipe(map(response => response.member || response['hydra:member'] || []));
   }
 
   getAlerta(id: number): Observable<Alerta> {
@@ -98,8 +107,9 @@ export class ApiService {
 
   // Órganos contratantes
   getOrganos(): Observable<any[]> {
-    return this.http.get<{ 'hydra:member': any[] }>(`${this.API_URL}/organo_contratantes`)
-      .pipe(map(response => response['hydra:member']));
+    return this.http.get<any>(`${this.API_URL}/organo_contratantes`, {
+      headers: { 'Accept': 'application/ld+json' }
+    }).pipe(map(response => response.member || response['hydra:member'] || []));
   }
 
   // Datos auxiliares

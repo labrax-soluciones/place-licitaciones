@@ -486,8 +486,8 @@ export class ListaLicitacionesComponent implements OnInit {
 
     this.api.getLicitaciones(filtros).subscribe({
       next: (response) => {
-        this.licitaciones = response['hydra:member'];
-        this.totalItems = response['hydra:totalItems'];
+        this.licitaciones = response.member || [];
+        this.totalItems = response.totalItems || 0;
         this.totalPages = Math.ceil(this.totalItems / this.itemsPerPage);
         this.loading = false;
       },

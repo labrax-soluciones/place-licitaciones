@@ -55,14 +55,8 @@ export interface CriterioAdjudicacion {
 }
 
 export interface LicitacionListResponse {
-  'hydra:member': Licitacion[];
-  'hydra:totalItems': number;
-  'hydra:view'?: {
-    'hydra:first'?: string;
-    'hydra:last'?: string;
-    'hydra:next'?: string;
-    'hydra:previous'?: string;
-  };
+  member: Licitacion[];
+  totalItems: number;
 }
 
 export interface FiltrosLicitacion {
