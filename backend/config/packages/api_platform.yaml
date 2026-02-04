@@ -1,0 +1,18 @@
+api_platform:
+    title: PLACE Licitaciones API
+    description: API para consultar licitaciones públicas de la Plataforma de Contratación del Sector Público
+    version: 1.0.0
+    defaults:
+        stateless: true
+        cache_headers:
+            vary: ['Content-Type', 'Authorization', 'Origin']
+    formats:
+        jsonld: ['application/ld+json']
+        json: ['application/json']
+    docs_formats:
+        jsonld: ['application/ld+json']
+        json: ['application/json']
+        html: ['text/html']
+    collection:
+        pagination:
+            items_per_page_parameter_name: itemsPerPage
