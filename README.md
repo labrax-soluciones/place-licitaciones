@@ -2,67 +2,104 @@
 
 Aplicación para consultar licitaciones públicas de vehículos desde la Plataforma de Contratación del Sector Público de España.
 
-## Stack
+## Cómo funciona
 
-- **Backend:** Symfony 7 + API Platform + PostgreSQL
-- **Frontend:** Angular 21 (standalone components)
-- **Puertos:** Backend 8500, Frontend 4500
+### Conexión con PLACE
 
-## Funcionalidad
+No usamos un webservice ni API REST. PLACE expone sus datos mediante **feeds ATOM (XML)** públicos que se actualizan periódicamente.
 
-- Sincroniza licitaciones desde el feed ATOM de PLACE
-- Muestra solo licitaciones relacionadas con vehículos (coches, motos, furgonetas, renting)
-- Palabras clave: vehículo, coche, automóvil, motocicleta, furgoneta, furgón, flota de vehículos, alquiler de vehículos, parque móvil, renting
+**Feed utilizado:**
+```
+https://contrataciondelestado.es/sindicacion/sindicacion_643/licitacionesPerfilContratante_COMPLETO3.atom
+```
 
-## Arrancar el proyecto
+Este feed contiene las licitaciones más recientes en formato ATOM/XML. Cada entrada (`<entry>`) incluye:
+- Título y descripción de la licitación
+- Expediente
+- Estado (Publicada, En evaluación, Adjudicada, etc.)
+- Tipo de contrato (Suministros, Servicios, Obras)
+- Importes (sin IVA y con IVA)
+- Fechas (publicación, límite de presentación)
+- Códigos CPV (clasificación de productos/servicios)
+- Órgano contratante (NIF y nombre)
+- Provincia
+- URL a la licitación en PLACE
 
-### Terminal 1 - Backend
+### Proceso de sincronización
+
+1. El comando `php bin/console app:sync-place` descarga el feed ATOM
+2. Parsea el XML y extrae los datos de cada licitación
+3. Guarda/actualiza en PostgreSQL usando Doctrine ORM
+4. Evita duplicados usando el `idPlace` (URL única de cada licitación)
+
+### Filtrado por categoría
+
+La app filtra licitaciones de vehículos buscando palabras clave en título y descripción:
+- vehículo, coche, automóvil, motocicleta, furgoneta, furgón
+- flota de vehículos, alquiler de vehículos, parque móvil, renting
+
+## Stack técnico
+
+| Componente | Tecnología |
+|------------|------------|
+| Backend | Symfony 7 + API Platform |
+| Base de datos | PostgreSQL |
+| Frontend | Angular 21 (standalone components) |
+| Parseo XML | SimpleXML (PHP nativo) |
+| Puerto backend | 8500 |
+| Puerto frontend | 4500 |
+
+## Estructura del proyecto
+
+```
+PLACE/
+├── backend/                    # Symfony 7
+│   ├── src/
+│   │   ├── Entity/
+│   │   │   ├── Licitacion.php
+│   │   │   └── OrganoContratante.php
+│   │   ├── Repository/
+│   │   │   └── LicitacionRepository.php  # Consultas y filtro por categoría
+│   │   ├── Service/
+│   │   │   └── PlaceAtomParser.php       # Parsea el feed ATOM
+│   │   ├── Command/
+│   │   │   └── SyncPlaceCommand.php      # Comando de sincronización
+│   │   └── Controller/
+│   │       └── DashboardController.php   # Endpoints de categorías
+│   └── config/
+│
+└── frontend/                   # Angular 21
+    └── src/app/
+        ├── components/
+        │   └── licitaciones/
+        │       └── lista-licitaciones.component.ts
+        ├── services/
+        │   └── api.service.ts
+        └── models/
+            └── licitacion.model.ts
+```
+
+## Comandos
+
 ```bash
+# Terminal 1 - Backend
 cd backend
 symfony server:start --port=8500
-```
 
-### Terminal 2 - Frontend
-```bash
+# Terminal 2 - Frontend
 cd frontend
 ng serve --port 4500
-```
 
-### Sincronizar licitaciones
-```bash
+# Sincronizar licitaciones desde PLACE
 cd backend
 php bin/console app:sync-place
 ```
 
-## Acceso
+## URLs
 
 - **Frontend:** http://localhost:4500/licitaciones
 - **API:** http://localhost:8500/api
-
-## Prompt para replicar este proyecto con Claude
-
-```
-Crea una aplicación para consultar licitaciones públicas de España desde la Plataforma de Contratación del Sector Público (PLACE).
-
-**Stack:**
-- Backend: Symfony 7 + API Platform + PostgreSQL
-- Frontend: Angular 21 (standalone components)
-- Puertos: Backend 8500, Frontend 4500
-
-**Funcionalidad:**
-- Sincronizar licitaciones desde el feed ATOM de PLACE: https://contrataciondelestado.es/sindicacion/sindicacion_643/licitacionesPerfilContratante_COMPLETO3.atom
-- Mostrar solo licitaciones relacionadas con vehículos (coches, motos, furgonetas, renting)
-- Palabras clave: vehículo, coche, automóvil, motocicleta, furgoneta, furgón, flota de vehículos, alquiler de vehículos, parque móvil, renting
-
-**Entidades:**
-- Licitacion: id, idPlace, expediente, titulo, descripcion, estado, tipoContrato, importeSinIva, importeConIva, provincia, codigosCpv, fechaPublicacion, fechaLimitePresentacion, urlLicitacion
-- OrganoContratante: id, nif, nombre
-
-**Comandos:**
-- Sincronizar: php bin/console app:sync-place
-- Backend: symfony server:start --port=8500
-- Frontend: ng serve --port 4500
-```
+- **Endpoint vehículos:** http://localhost:8500/api/licitaciones/categoria/vehiculos
 
 ## Repositorio
 
