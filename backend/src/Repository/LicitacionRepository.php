@@ -181,19 +181,15 @@ class LicitacionRepository extends ServiceEntityRepository
         $categorias = [
             'vehiculos' => [
                 'vehículo', 'vehiculo', 'vehículos', 'vehiculos',
-                'coche', 'coches',
+                'coche ', 'coches',
                 'automóvil', 'automovil', 'automóviles', 'automoviles',
-                'turismo', 'turismos',
-                'motocicleta', 'motocicletas', 'moto', 'motos',
-                'renting',
+                'motocicleta', 'motocicletas', 'moto ', 'motos',
                 'furgoneta', 'furgonetas',
                 'furgón', 'furgon', 'furgones',
-                'camión', 'camion', 'camiones',
-                'autocar', 'autocares',
-                'autobús', 'autobus', 'autobuses',
                 'flota de vehículos', 'flota de vehiculos',
                 'alquiler de vehículos', 'alquiler de vehiculos',
                 'parque móvil', 'parque movil',
+                'renting',
             ],
             'informatica' => [
                 'informático', 'informatico', 'informática', 'informatica',
