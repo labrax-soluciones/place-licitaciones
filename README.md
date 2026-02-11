@@ -1,106 +1,239 @@
-# PLACE - Licitaciones de Vehículos
+# PLACE - Licitaciones del Sector Público
 
-Aplicación para consultar licitaciones públicas de vehículos desde la Plataforma de Contratación del Sector Público de España.
+Aplicación para consultar y monitorizar licitaciones públicas desde la Plataforma de Contratación del Sector Público de España (PLACE).
 
-## Cómo funciona
+## Cómo se conecta a las licitaciones del Estado
 
-### Conexión con PLACE
+### Fuente de datos
 
-No usamos un webservice ni API REST. PLACE expone sus datos mediante **feeds ATOM (XML)** públicos que se actualizan periódicamente.
+PLACE **no ofrece una API REST ni webservice**. Los datos se obtienen de un **feed ATOM (XML) público** que no requiere autenticación:
 
-**Feed utilizado:**
 ```
-https://contrataciondelestado.es/sindicacion/sindicacion_643/licitacionesPerfilContratante_COMPLETO3.atom
+https://contrataciondelestado.es/sindicacion/sindicacion_643/licitacionesPerfilesContratanteCompleto3.atom
 ```
 
-Este feed contiene las licitaciones más recientes en formato ATOM/XML. Cada entrada (`<entry>`) incluye:
-- Título y descripción de la licitación
-- Expediente
-- Estado (Publicada, En evaluación, Adjudicada, etc.)
-- Tipo de contrato (Suministros, Servicios, Obras)
-- Importes (sin IVA y con IVA)
-- Fechas (publicación, límite de presentación)
-- Códigos CPV (clasificación de productos/servicios)
-- Órgano contratante (NIF y nombre)
-- Provincia
-- URL a la licitación en PLACE
+Este feed se actualiza periódicamente con las licitaciones más recientes publicadas en la plataforma.
 
-### Proceso de sincronización
+### Qué contiene cada entrada del feed
 
-1. El comando `php bin/console app:sync-place` descarga el feed ATOM
-2. Parsea el XML y extrae los datos de cada licitación
-3. Guarda/actualiza en PostgreSQL usando Doctrine ORM
-4. Evita duplicados usando el `idPlace` (URL única de cada licitación)
+Cada `<entry>` del ATOM incluye datos estructurados en múltiples namespaces XML:
 
-### Filtrado por categoría
+| Campo | Descripción |
+|-------|-------------|
+| Expediente | Número identificador único |
+| Título | Descripción de la licitación |
+| Estado | Publicada, En evaluación, Adjudicada, Resuelta, etc. |
+| Tipo de contrato | Suministros, Servicios, Obras |
+| Importes | Sin IVA y con IVA |
+| Códigos CPV | Clasificación de productos/servicios |
+| Fechas | Publicación y límite de presentación |
+| Órgano contratante | NIF, nombre, dirección, contacto, código DIR3 |
+| Provincia | Ubicación geográfica |
+| Documentos | Enlaces a pliegos y documentación |
+| Criterios de adjudicación | Criterios y ponderaciones |
+| Datos de adjudicación | Adjudicatario, importe, fecha (si está resuelta) |
 
-La app filtra licitaciones de vehículos buscando palabras clave en título y descripción:
-- vehículo, coche, automóvil, motocicleta, furgoneta, furgón
-- flota de vehículos, alquiler de vehículos, parque móvil, renting
+### Namespaces XML utilizados
 
-## Stack técnico
+El feed usa múltiples namespaces que hay que registrar para poder hacer consultas XPath:
 
-| Componente | Tecnología |
-|------------|------------|
-| Backend | Symfony 7 + API Platform |
-| Base de datos | PostgreSQL |
-| Frontend | Angular 21 (standalone components) |
-| Parseo XML | SimpleXML (PHP nativo) |
-| Puerto backend | 8500 |
-| Puerto frontend | 4500 |
+- **Atom:** `http://www.w3.org/2005/Atom`
+- **CBC:** Common Basic Components
+- **CAC:** Common Aggregate Components
+- **Extensiones PLACE:** namespaces propios de la plataforma
+
+### Pipeline de datos
+
+```
+┌──────────────────────────────────────────────────┐
+│  PLACE - Feed ATOM público (XML)                 │
+│  contrataciondelestado.es/sindicacion/...        │
+└──────────────────────┬───────────────────────────┘
+                       │ HTTP GET (120s timeout)
+                       ▼
+┌──────────────────────────────────────────────────┐
+│  PlaceAtomParser (PHP)                           │
+│  - SimpleXML + XPath con 4+ namespaces           │
+│  - Extrae 40+ campos por licitación              │
+│  - Cache en memoria para órganos contratantes    │
+│  - Flush cada 50 registros (optimización)        │
+└──────────────────────┬───────────────────────────┘
+                       │ Doctrine ORM (upsert por idPlace)
+                       ▼
+┌──────────────────────────────────────────────────┐
+│  PostgreSQL                                      │
+│  Tablas: licitacion, organo_contratante, alerta  │
+│  Índices: expediente, estado, tipo, fechas,      │
+│           provincia, importe                     │
+└──────────────────────┬───────────────────────────┘
+                       │
+          ┌────────────┴────────────┐
+          ▼                         ▼
+┌──────────────────┐    ┌──────────────────────┐
+│  API Platform    │    │  Controllers custom  │
+│  CRUD automático │    │  /dashboard/*        │
+│  /licitacions    │    │  /categorias         │
+│  /organo_contr.. │    │  /licitaciones/cat.. │
+│  /alertas        │    └──────────────────────┘
+└────────┬─────────┘
+         │ JSON / JSON-LD
+         ▼
+┌──────────────────────────────────────────────────┐
+│  Angular Frontend                                │
+│  Dashboard, listado, detalle, filtros, alertas   │
+└──────────────────────────────────────────────────┘
+```
+
+## Cómo replicar el proceso
+
+### 1. Requisitos previos
+
+- PHP 8.2+
+- Composer
+- PostgreSQL 16
+- Node.js 20+ y npm
+- Symfony CLI (opcional pero recomendado)
+
+### 2. Variables de entorno
+
+```env
+DATABASE_URL=postgresql://user:password@localhost:5432/place_licitaciones
+PLACE_ATOM_URL=https://contrataciondelestado.es/sindicacion/sindicacion_643/licitacionesPerfilesContratanteCompleto3.atom
+CORS_ALLOW_ORIGIN=^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$
+```
+
+### 3. Backend (Symfony + API Platform)
+
+```bash
+cd backend
+
+# Instalar dependencias
+composer install
+
+# Crear base de datos y ejecutar migraciones
+php bin/console doctrine:database:create
+php bin/console doctrine:migrations:migrate
+
+# Sincronizar licitaciones desde PLACE
+php bin/console app:sync-place
+
+# Iniciar servidor
+symfony server:start --port=8500
+```
+
+### 4. Frontend (Angular)
+
+```bash
+cd frontend
+
+# Instalar dependencias
+npm install
+
+# Iniciar servidor de desarrollo
+ng serve --port 4500
+```
+
+### 5. Docker (alternativa)
+
+```bash
+docker-compose up
+# Backend:  http://localhost:8000
+# Frontend: http://localhost:4200
+# Database: localhost:5432
+```
 
 ## Estructura del proyecto
 
 ```
 PLACE/
-├── backend/                    # Symfony 7
+├── backend/                          # Symfony 7.4
 │   ├── src/
-│   │   ├── Entity/
-│   │   │   ├── Licitacion.php
-│   │   │   └── OrganoContratante.php
-│   │   ├── Repository/
-│   │   │   └── LicitacionRepository.php  # Consultas y filtro por categoría
-│   │   ├── Service/
-│   │   │   └── PlaceAtomParser.php       # Parsea el feed ATOM
 │   │   ├── Command/
-│   │   │   └── SyncPlaceCommand.php      # Comando de sincronización
-│   │   └── Controller/
-│   │       └── DashboardController.php   # Endpoints de categorías
+│   │   │   └── SyncPlaceCommand.php          # Comando de sincronización
+│   │   ├── Controller/
+│   │   │   └── DashboardController.php       # Endpoints custom (stats, categorías)
+│   │   ├── Entity/
+│   │   │   ├── Licitacion.php                # Entidad principal (25+ campos)
+│   │   │   ├── OrganoContratante.php         # Órganos contratantes
+│   │   │   ├── Alerta.php                    # Alertas de usuario
+│   │   │   └── Usuario.php                   # Usuarios (base para auth futuro)
+│   │   ├── Repository/
+│   │   │   ├── LicitacionRepository.php      # Queries avanzadas y filtros
+│   │   │   └── OrganoContratanteRepository.php
+│   │   └── Service/
+│   │       └── PlaceAtomParser.php           # Parseo del feed ATOM/XML
 │   └── config/
 │
-└── frontend/                   # Angular 21
+└── frontend/                         # Angular 21
     └── src/app/
         ├── components/
-        │   └── licitaciones/
-        │       └── lista-licitaciones.component.ts
+        │   ├── lista-licitaciones/            # Listado con filtros
+        │   ├── detalle-licitacion/            # Vista detalle
+        │   ├── dashboard/                     # Estadísticas
+        │   ├── alertas/                       # Gestión de alertas
+        │   └── header/                        # Navegación
         ├── services/
-        │   └── api.service.ts
+        │   └── api.service.ts                 # Cliente HTTP
         └── models/
-            └── licitacion.model.ts
+            └── licitacion.model.ts            # Interfaces TypeScript
 ```
 
-## Comandos
+## Endpoints de la API
 
-```bash
-# Terminal 1 - Backend
-cd backend
-symfony server:start --port=8500
+### API Platform (CRUD automático)
 
-# Terminal 2 - Frontend
-cd frontend
-ng serve --port 4500
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/api/licitacions` | Listado con filtros (search, range, date, order) |
+| GET | `/api/licitacions/{id}` | Detalle de una licitación |
+| GET | `/api/organo_contratantes` | Órganos contratantes |
+| GET/POST/PATCH/DELETE | `/api/alertas` | Gestión de alertas |
 
-# Sincronizar licitaciones desde PLACE
-cd backend
-php bin/console app:sync-place
-```
+### Controllers custom
 
-## URLs
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/api/dashboard/estadisticas` | Estadísticas generales |
+| GET | `/api/dashboard/recientes` | Últimas 10 licitaciones |
+| GET | `/api/dashboard/abiertas` | Licitaciones abiertas con días restantes |
+| GET | `/api/categorias` | Categorías disponibles |
+| GET | `/api/licitaciones/categoria/{cat}` | Filtrar por categoría |
 
-- **Frontend:** http://localhost:4500/licitaciones
+## Sistema de categorías
+
+Las licitaciones se clasifican por palabras clave (búsqueda en título y descripción):
+
+| Categoría | Palabras clave |
+|-----------|---------------|
+| **Vehículos** | vehículo, coche, automóvil, motocicleta, furgoneta, furgón, flota de vehículos, alquiler de vehículos, parque móvil, renting |
+| **Informática** | informático, software, hardware, ordenador, servidor, cloud, nube, desarrollo web, aplicación |
+| **Limpieza** | limpieza, higiene, desinfección, mantenimiento limpieza, servicio limpieza |
+| **Seguridad** | seguridad, vigilancia, vigilante, alarma, cctv, videovigilancia |
+
+## Claves técnicas para replicar
+
+1. **No hay API oficial** — todo se basa en consumir el feed ATOM/XML público
+2. **El parseo XML es lo más complejo** — hay que manejar múltiples namespaces con XPath
+3. **Se usa SimpleXML nativo de PHP** — sin librerías externas para el parseo
+4. **Patrón upsert** — se busca por `idPlace` (URL única) para evitar duplicados al re-sincronizar
+5. **Cache en memoria** — los órganos contratantes se cachean durante la sincronización para evitar consultas repetidas a la BD
+6. **Flush por lotes** — cada 50 registros para no saturar la memoria
+7. **Se guarda el XML crudo** — en cada licitación, para auditoría y depuración
+
+## URLs de desarrollo
+
+- **Frontend:** http://localhost:4500
 - **API:** http://localhost:8500/api
-- **Endpoint vehículos:** http://localhost:8500/api/licitaciones/categoria/vehiculos
+- **Documentación API:** http://localhost:8500/api/docs
+- **Vehículos:** http://localhost:8500/api/licitaciones/categoria/vehiculos
 
-## Repositorio
+## Stack técnico
 
-https://github.com/labrax-soluciones/place-licitaciones
+| Componente | Tecnología |
+|------------|------------|
+| Backend | PHP 8.2 / Symfony 7.4 / API Platform |
+| Base de datos | PostgreSQL 16 / Doctrine ORM |
+| Frontend | Angular 21 (standalone components) / TypeScript 5.9 |
+| Parseo XML | SimpleXML + XPath (PHP nativo) |
+| Gráficas | Chart.js + ng2-charts |
+| Contenedores | Docker + Docker Compose |
